@@ -35,8 +35,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>YAMS Mobile uses Bluetooth to connect to MotionSenSE wristbands and control data collection.</string>
 	<key>RCTNewArchEnabled</key>
