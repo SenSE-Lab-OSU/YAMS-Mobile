@@ -1,4 +1,38 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+<h1 align="center">YAMS Mobile</h1>
+
+<p align="center">
+  <img src="assets/yams_logo_v2.png" alt="YAMS logo" width="120">
+</p>
+
+<p align="center">
+  <img alt="React Native 0.86" src="https://img.shields.io/badge/React_Native-0.86-61DAFB?style=flat-square&logo=react&logoColor=white">
+  <img alt="TypeScript 5.8" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?style=flat-square&logo=typescript&logoColor=white">
+  <img alt="Platform: Android and iOS" src="https://img.shields.io/badge/platform-Android%20%7C%20iOS-3DDC84?style=flat-square&logo=android&logoColor=white">
+  <img alt="Bluetooth Low Energy" src="https://img.shields.io/badge/BLE-react--native--ble--plx-0082FC?style=flat-square&logo=bluetooth&logoColor=white">
+</p>
+
+<p align="center">
+  <em>Android-first mobile companion to the desktop YAMS toolkit — collects accelerometer data from MotionSenSE BLE devices.</em>
+</p>
+
+---
+
+YAMS Mobile connects to [MotionSenSE](https://github.com/SenSE-Lab-OSU) BLE
+accelerometer devices, drives data collection sessions, and logs ENMO samples to
+disk in a format that drops directly into the desktop `yams` sync pipeline.
+
+- **BLE protocol** — GATT service/characteristic constants, little-endian
+  packing helpers, and ENMO sample decoding for both current and legacy
+  firmware payload shapes.
+- **Connection management** — a single `BleController` owns all hardware
+  contact, handling multi-device connections, auto-reconnect, and device-clock
+  timestamp reconstruction (`deviceTime = t0 + counter / sampleRateHz`).
+- **Session logging** — one line per sample (`ENMO Counter deviceTime`) written
+  through a serialized queue, byte-compatible with `msense_yams_sync.py`.
+
+Protocol and file-format correctness is defined by parity with the desktop
+Python implementation, not by this repo alone — see `CLAUDE.md` for which files
+mirror which Python modules.
 
 # Getting Started
 
