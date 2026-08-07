@@ -79,7 +79,7 @@ android {
 
     namespace "com.yamsmobile"
     defaultConfig {
-        applicationId "com.yamsmobile"
+        applicationId "org.senselab.yamsmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
