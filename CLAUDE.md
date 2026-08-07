@@ -53,8 +53,8 @@ BLE-level bookkeeping (subscriptions, reconnect timers, clock origin).
 - `samples.ts` — decodes the ENMO notify payload; handles both new firmware
   (float32 ENMO + uint32 counter, 8 bytes) and legacy firmware (uint16
   counter, 6 bytes) payload shapes.
-- `BleController.ts` — connection lifecycle, auto-reconnect (polls every
-  `RECONNECT_INTERVAL_MS` and re-registers notifications on reconnect),
+- `BleController.ts` — connection lifecycle, auto-reconnect (delegated to
+  `src/platform/blePolicy.ts`; re-registers notifications on reconnect),
   collection start/stop sequence (write unix time → write participant
   encoding → write collection control → subscribe to notifications), and
   device-clock timestamp reconstruction: `deviceTime = t0 + counter / sampleRateHz`,
@@ -70,6 +70,35 @@ internal promise queue (`this.queue`) to avoid interleaved/partial file
 writes since `append()` is fire-and-forget from the caller's perspective;
 `flush()` awaits the queue and should be called before finishing a session.
 
+**Platform differences:** `src/platform/blePolicy.ts` holds everything about BLE
+that differs by platform — `BleManager` construction options, permission
+requests, and the reconnect strategy — as two `BlePolicy` objects selected by
+`selectBlePolicy()`. `BleController` takes one in its constructor (injectable,
+which is how the reconnect and restoration paths are unit-tested). Three rules:
+
+- A one-line value difference (a path, a permission list) stays inline with
+  `Platform.OS` and a comment explaining why — see `src/storage/paths.ts`.
+- A behavioral fork (reconnect, background execution, state restoration) belongs
+  in `blePolicy.ts`. The two reconnect strategies differ on purpose: Android
+  polls because it has no equivalent of a pending Core Bluetooth connect, and
+  iOS must *not* poll because timers stop firing once a suspended app has no BLE
+  traffic to wake it.
+- **Never fork the wire protocol, ENMO decoding, participant encoding, or the
+  `SessionLogger` line format.** Correctness there is defined by parity with the
+  desktop tooling, and a platform-specific tweak would make the same wristband
+  produce files that the sync pipeline reads differently depending on which
+  phone recorded them.
+
+**Background collection:** iOS declares `UIBackgroundModes: bluetooth-central`
+and uses Core Bluetooth state restoration (`restoreStateIdentifier` in
+`blePolicy.ts` — changing that string orphans sessions waiting to be restored).
+Because restoration relaunches into a fresh JS process, `SessionState`
+(src/storage/SessionState.ts) persists the in-flight session, including each
+device's clock origin, to app-private storage; `App.tsx` rehydrates from it and
+calls `BleController.resumeCollection()`, which re-subscribes *without* rewriting
+`t0` or the collection-control characteristic. Android has no equivalent yet — a
+foreground service is the intended mechanism and is not implemented.
+
 **Participant encoding:** `participant.ts` mirrors
 `participant_encoding_default()` from the desktop collector: `sub-XXXX` /
 `ses-YY` text inputs are reduced to `subNumber * 100 + sesNumber` and written
@@ -83,11 +112,24 @@ colors directly, so new UI should follow the same pattern instead of hardcoding 
 
 ## Notes
 
-- Only one test currently exists (`__tests__/App.test.tsx`, a smoke render
-  test). There is no BLE mocking layer yet.
-- `react-native-ble-plx` is a native module — logic in `BleController` can't
-  be exercised in Jest without a device/simulator or a mock; prefer testing
-  the pure helpers (`binary.ts`, `samples.ts`, `participant.ts`) directly.
+- `jest.setup.js` stubs the native modules that would otherwise fail
+  `TurboModuleRegistry.getEnforcing()` at import time (ble-plx, keep-awake,
+  react-native-fs). Any test can override one with a richer fake — a per-file
+  `jest.mock()` factory wins over what the setup file registers, which is how
+  the `BleController` tests drive `restoreStateFunction` and disconnect
+  callbacks by hand.
+- `BleController` takes a `BlePolicy` in its constructor, so reconnect and
+  restoration behaviour is testable without hardware. The pure helpers
+  (`binary.ts`, `samples.ts`, `participant.ts`) are still the easiest things to
+  test directly.
 - Android requires runtime permission requests for BLE
-  (`BleController.requestAndroidPermissions`): `BLUETOOTH_SCAN` +
-  `BLUETOOTH_CONNECT` on API 31+, `ACCESS_FINE_LOCATION` below that.
+  (`androidBlePolicy.requestPermissions` in `src/platform/blePolicy.ts`):
+  `BLUETOOTH_SCAN` + `BLUETOOTH_CONNECT` on API 31+, `ACCESS_FINE_LOCATION`
+  below that.
+- `BleController.startScan` deliberately passes `null` service UUIDs and filters
+  by advertised name. iOS requires explicit service UUIDs for *background*
+  scanning, but the app only ever scans from the foreground — restoration
+  reconnects to known devices rather than rediscovering them. Do not switch the
+  filter to a UUID array without first confirming the wristband advertises that
+  service in its advertising packet rather than only exposing it in its GATT
+  table; if it does not, foreground discovery breaks.
