@@ -1,19 +1,7 @@
-import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 
 import { EnmoSample } from '../ble/samples';
-
-// Android's DocumentDirectoryPath is private internal storage with no file-manager
-// access at all, and ExternalDirectoryPath (Android/data/<package>/files) is hidden
-// from file manager UIs (Samsung My Files, Google Files, etc.) on Android 11+ even
-// though it's technically on external storage. DownloadDirectoryPath is a real public
-// directory, so files land in a normal, always-visible Downloads folder. iOS keeps
-// DocumentDirectoryPath, exposed via the UIFileSharingEnabled/
-// LSSupportsOpeningDocumentsInPlace Info.plist keys.
-const ROOT_DIR =
-  Platform.OS === 'android'
-    ? `${RNFS.DownloadDirectoryPath}/yams-mobile-data`
-    : `${RNFS.DocumentDirectoryPath}/yams-mobile-data`;
+import { DATA_ROOT_DIR as ROOT_DIR } from './paths';
 
 export interface SessionDeviceInfo {
   id: string;
