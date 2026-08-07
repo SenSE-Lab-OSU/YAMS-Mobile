@@ -27,6 +27,7 @@ import { BleController } from './src/ble/BleController';
 import { EnmoSample } from './src/ble/samples';
 import { encodeParticipant } from './src/participant';
 import { SessionLogger } from './src/storage/SessionLogger';
+import { SessionState } from './src/storage/SessionState';
 import { useTheme } from './src/theme';
 
 const onlyDigits = (value: string): string => value.replace(/[^0-9]/g, '');
@@ -77,7 +78,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     const controller = new BleController();
     controllerRef.current = controller;
-    controller.requestAndroidPermissions();
+    controller.requestPermissions();
 
     const offConn = controller.onConnectionChange((id, connected) => {
       setRows(prev => {
@@ -110,10 +111,60 @@ function App(): React.JSX.Element {
       });
     });
 
+    // iOS may relaunch the app in the background with its connections intact but
+    // this process's state empty. Rebuild the session from disk and re-subscribe,
+    // without touching the hardware's own collection state.
+    const restoreSession = async (restored: Device[]) => {
+      const session = await SessionState.load();
+      if (!session) return;
+
+      setSubNumber(session.subjectId.replace(/^sub-/, ''));
+      setSesNumber(session.sessionId.replace(/^ses-/, ''));
+
+      let resumed = 0;
+      for (const device of restored) {
+        const entry = session.devices.find(candidate => candidate.id === device.id);
+        if (!entry) continue;
+
+        if (entry.clockOriginUnixSec != null) {
+          controller.setClockOrigin(device.id, entry.clockOriginUnixSec);
+        }
+        loggersRef.current.set(
+          device.id,
+          new SessionLogger(session.sessionDir, entry.name, device.id),
+        );
+        setRows(prev => {
+          const next = new Map(prev);
+          next.set(device.id, {
+            id: device.id,
+            name: entry.name,
+            connected: true,
+            battery: null,
+            lastSample: null,
+          });
+          return next;
+        });
+
+        try {
+          await controller.resumeCollection(device.id);
+          resumed += 1;
+        } catch (error) {
+          console.warn('Could not resume collection for', device.id, error);
+        }
+      }
+
+      if (resumed > 0) setCollecting(true);
+    };
+
+    const offRestore = controller.onRestoredDevices(devices => {
+      restoreSession(devices).catch(error => console.warn('Session restore failed', error));
+    });
+
     return () => {
       offConn();
       offBattery();
       offEnmo();
+      offRestore();
       controller.destroy();
     };
   }, []);
@@ -167,18 +218,36 @@ function App(): React.JSX.Element {
     if (!controller) return;
 
     const sessionDir = await SessionLogger.newSessionDir();
+    const devices = [...rows.values()].map(row => ({ id: row.id, name: row.name }));
+    const startedAt = new Date().toISOString();
 
     await SessionLogger.writeSessionInfo(sessionDir, {
       subjectId: subId,
       sessionId: sesId,
       participantEncoding,
-      devices: [...rows.values()].map(row => ({ id: row.id, name: row.name })),
-      startedAt: new Date().toISOString(),
+      devices,
+      startedAt,
+    });
+
+    await SessionState.save({
+      sessionDir,
+      subjectId: subId,
+      sessionId: sesId,
+      participantEncoding,
+      devices: devices.map(device => ({ ...device, clockOriginUnixSec: null })),
+      startedAt,
     });
 
     for (const row of rows.values()) {
       loggersRef.current.set(row.id, new SessionLogger(sessionDir, row.name, row.id));
       await controller.startCollection(row.id, participantEncoding);
+
+      // Recorded per device rather than up front: t0 only exists once
+      // startCollection has written it to the hardware.
+      const clockOrigin = controller.getClockOrigin(row.id);
+      if (clockOrigin != null) {
+        await SessionState.setClockOrigin(row.id, clockOrigin);
+      }
     }
     setCollecting(true);
   };
@@ -191,6 +260,7 @@ function App(): React.JSX.Element {
       await controller.stopCollection(row.id);
       await loggersRef.current.get(row.id)?.flush();
     }
+    await SessionState.clear();
     setCollecting(false);
   };
 

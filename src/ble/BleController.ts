@@ -1,6 +1,6 @@
-import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, Device, Subscription } from 'react-native-ble-plx';
 
+import { BlePolicy, selectBlePolicy } from '../platform/blePolicy';
 import { uint32LEToBase64, uint64LEToBase64, base64ToBytes, bytesToUint8 } from './binary';
 import * as Protocol from './protocol';
 import { decodeEnmoPayload, EnmoSample } from './samples';
@@ -15,42 +15,62 @@ export interface ConnectedDeviceState {
 type EnmoListener = (deviceId: string, sample: EnmoSample) => void;
 type BatteryListener = (deviceId: string, percent: number) => void;
 type ConnectionListener = (deviceId: string, connected: boolean) => void;
-
-const RECONNECT_INTERVAL_MS = 10_000;
+type RestoreListener = (devices: Device[]) => void;
 
 export class BleController {
-  private manager = new BleManager();
+  private manager: BleManager;
+  private policy: BlePolicy;
   private devices = new Map<string, ConnectedDeviceState>();
   private enmoSubs = new Map<string, Subscription>();
   private batterySubs = new Map<string, Subscription>();
-  private reconnectTimers = new Map<string, ReturnType<typeof setInterval>>();
 
   private enmoListeners = new Set<EnmoListener>();
   private batteryListeners = new Set<BatteryListener>();
   private connectionListeners = new Set<ConnectionListener>();
+  private restoreListeners = new Set<RestoreListener>();
+
+  // restoreStateFunction fires while BleManager is still being constructed, which
+  // is before any caller can have subscribed. Hold the result until one does.
+  private pendingRestore: Device[] | null = null;
 
   sampleRateHz = Protocol.DEFAULT_SAMPLE_RATE_HZ;
 
-  async requestAndroidPermissions(): Promise<boolean> {
-    if (Platform.OS !== 'android') return true;
+  constructor(policy: BlePolicy = selectBlePolicy()) {
+    this.policy = policy;
+    // Assigned here rather than as a field initializer so every listener set above
+    // exists before restoreStateFunction can fire during construction.
+    this.manager = new BleManager(policy.managerOptions(devices => this.adoptRestored(devices)));
+  }
 
-    if (Platform.Version >= 31) {
-      const granted = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      ]);
-      return (
-        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED &&
-        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED
-      );
+  /**
+   * Takes ownership of peripherals handed back by state restoration. They are
+   * already connected at the OS level, but this process has never seen them, so
+   * they need bookkeeping entries and disconnect watchers before anything else
+   * can use them.
+   */
+  private adoptRestored(devices: Device[]): void {
+    for (const device of devices) {
+      if (this.devices.has(device.id)) continue;
+
+      this.devices.set(device.id, {
+        device,
+        clockOriginUnixSec: null,
+        collecting: false,
+        autoReconnect: true,
+      });
+      this.watchDisconnect(device.id);
+      this.connectionListeners.forEach(fn => fn(device.id, true));
     }
 
-    const permissions = [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
-    if (Platform.Version < 29) {
-      permissions.push(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE);
+    if (this.restoreListeners.size === 0) {
+      this.pendingRestore = devices;
+      return;
     }
-    const granted = await PermissionsAndroid.requestMultiple(permissions);
-    return Object.values(granted).every(result => result === PermissionsAndroid.RESULTS.GRANTED);
+    this.restoreListeners.forEach(fn => fn(devices));
+  }
+
+  requestPermissions(): Promise<boolean> {
+    return this.policy.requestPermissions();
   }
 
   startScan(
@@ -76,22 +96,33 @@ export class BleController {
     const connected = await device.connect();
     await connected.discoverAllServicesAndCharacteristics();
 
+    // Carry forward whatever this device already had. connect() is also the
+    // reconnect path, and resetting here would drop the clock origin mid-session,
+    // silently switching the third column from reconstructed device time to phone
+    // time for every remaining sample.
+    const previous = this.devices.get(device.id);
     this.devices.set(device.id, {
       device: connected,
-      clockOriginUnixSec: null,
-      collecting: false,
-      autoReconnect: true,
+      clockOriginUnixSec: previous?.clockOriginUnixSec ?? null,
+      collecting: previous?.collecting ?? false,
+      autoReconnect: previous?.autoReconnect ?? true,
     });
 
-    this.manager.onDeviceDisconnected(device.id, () => {
-      this.connectionListeners.forEach(fn => fn(device.id, false));
-      const state = this.devices.get(device.id);
-      if (state?.autoReconnect) {
-        this.scheduleReconnect(device.id);
-      }
-    });
+    this.watchDisconnect(device.id);
 
     this.connectionListeners.forEach(fn => fn(device.id, true));
+  }
+
+  private watchDisconnect(deviceId: string): void {
+    this.manager.onDeviceDisconnected(deviceId, () => {
+      this.connectionListeners.forEach(fn => fn(deviceId, false));
+      if (this.devices.get(deviceId)?.autoReconnect) {
+        this.policy.beginReconnect(deviceId, {
+          attempt: () => this.attemptReconnect(deviceId),
+          isActive: () => this.devices.get(deviceId)?.autoReconnect === true,
+        });
+      }
+    });
   }
 
   async disconnect(deviceId: string): Promise<void> {
@@ -99,7 +130,7 @@ export class BleController {
     if (!state) return;
 
     state.autoReconnect = false;
-    this.clearReconnect(deviceId);
+    this.policy.cancelReconnect(deviceId);
     this.enmoSubs.get(deviceId)?.remove();
     this.batterySubs.get(deviceId)?.remove();
     this.enmoSubs.delete(deviceId);
@@ -115,37 +146,26 @@ export class BleController {
   setAutoReconnect(deviceId: string, enabled: boolean): void {
     const state = this.devices.get(deviceId);
     if (state) state.autoReconnect = enabled;
-    if (!enabled) this.clearReconnect(deviceId);
+    if (!enabled) this.policy.cancelReconnect(deviceId);
   }
 
-  private scheduleReconnect(deviceId: string): void {
-    if (this.reconnectTimers.has(deviceId)) return;
-    const timer = setInterval(async () => {
-      const state = this.devices.get(deviceId);
-      if (!state) return;
-      try {
-        const isConnected = await state.device.isConnected();
-        if (isConnected) {
-          this.clearReconnect(deviceId);
-          return;
-        }
-        await this.connect(state.device);
-        this.clearReconnect(deviceId);
-        if (state.collecting) {
-          await this.registerNotifications(deviceId);
-        }
-      } catch {
-        // still disconnected; try again on the next tick
+  /** One reconnect attempt. Returns true once the device is connected again. */
+  private async attemptReconnect(deviceId: string): Promise<boolean> {
+    const state = this.devices.get(deviceId);
+    if (!state) return true;
+
+    try {
+      if (await state.device.isConnected()) return true;
+
+      await this.connect(state.device);
+      // Read back from the map rather than the captured state: connect() replaces
+      // the entry, and a mid-session reconnect must re-subscribe to resume.
+      if (this.devices.get(deviceId)?.collecting) {
+        await this.registerNotifications(deviceId);
       }
-    }, RECONNECT_INTERVAL_MS);
-    this.reconnectTimers.set(deviceId, timer);
-  }
-
-  private clearReconnect(deviceId: string): void {
-    const timer = this.reconnectTimers.get(deviceId);
-    if (timer) {
-      clearInterval(timer);
-      this.reconnectTimers.delete(deviceId);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -189,6 +209,35 @@ export class BleController {
     this.requireState(deviceId).collecting = true;
   }
 
+  /**
+   * Re-subscribes to a device that was already collecting when this process was
+   * terminated. Deliberately does not rewrite unix time, participant encoding, or
+   * the collection control characteristic: the hardware is mid-session, and a
+   * fresh t0 would not match the timestamps already in the session file.
+   */
+  async resumeCollection(deviceId: string): Promise<void> {
+    const state = this.requireState(deviceId);
+    // Service discovery does not survive the process, even though the connection does.
+    await state.device.discoverAllServicesAndCharacteristics();
+    await this.registerNotifications(deviceId);
+    state.collecting = true;
+  }
+
+  /** The device clock origin (t0), or null if collection has not started for it. */
+  getClockOrigin(deviceId: string): number | null {
+    return this.devices.get(deviceId)?.clockOriginUnixSec ?? null;
+  }
+
+  /**
+   * Seeds t0 from a persisted session without re-writing it to the hardware.
+   * Used when a restored connection outlives the process that established it, so
+   * timestamps continue to be reconstructed the same way the session started.
+   */
+  setClockOrigin(deviceId: string, clockOriginUnixSec: number): void {
+    const state = this.devices.get(deviceId);
+    if (state) state.clockOriginUnixSec = clockOriginUnixSec;
+  }
+
   async stopCollection(deviceId: string): Promise<void> {
     await this.writeCollectionControl(deviceId, false);
     this.requireState(deviceId).collecting = false;
@@ -230,6 +279,9 @@ export class BleController {
   /** Reconstructs device unix time from the hardware counter: t0 + counter / fs. */
   private computeDeviceTime(deviceId: string, counter: number): number {
     const t0 = this.devices.get(deviceId)?.clockOriginUnixSec;
+    // Intentional: with no clock origin the third column carries phone unix time
+    // rather than a reconstructed device time. This is a deliberate part of the
+    // data format -- do not remove it, drop the sample, or throw here.
     if (t0 == null) return Date.now() / 1000;
     return t0 + counter / this.sampleRateHz;
   }
@@ -249,6 +301,23 @@ export class BleController {
     return () => this.connectionListeners.delete(listener);
   }
 
+  /**
+   * Fires with the devices handed back by iOS state restoration. Delivers
+   * immediately if restoration already happened during construction, so a
+   * subscriber that registers a tick too late still sees it.
+   */
+  onRestoredDevices(listener: RestoreListener): () => void {
+    this.restoreListeners.add(listener);
+
+    if (this.pendingRestore) {
+      const devices = this.pendingRestore;
+      this.pendingRestore = null;
+      listener(devices);
+    }
+
+    return () => this.restoreListeners.delete(listener);
+  }
+
   private requireState(deviceId: string): ConnectedDeviceState {
     const state = this.devices.get(deviceId);
     if (!state) throw new Error(`Device ${deviceId} is not connected`);
@@ -256,8 +325,7 @@ export class BleController {
   }
 
   destroy(): void {
-    this.reconnectTimers.forEach(timer => clearInterval(timer));
-    this.reconnectTimers.clear();
+    this.policy.cancelAllReconnects();
     this.manager.destroy();
   }
 }
