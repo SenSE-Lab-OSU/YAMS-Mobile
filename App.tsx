@@ -26,6 +26,7 @@ import { StatusChip, Tone } from './src/components/StatusChip';
 import { BleController } from './src/ble/BleController';
 import { EnmoSample } from './src/ble/samples';
 import { encodeParticipant } from './src/participant';
+import { BackgroundSession } from './src/platform/backgroundSession';
 import { SessionLogger } from './src/storage/SessionLogger';
 import { SessionState } from './src/storage/SessionState';
 import { useTheme } from './src/theme';
@@ -79,6 +80,7 @@ function App(): React.JSX.Element {
     const controller = new BleController();
     controllerRef.current = controller;
     controller.requestPermissions();
+    BackgroundSession.requestPermission();
 
     const offConn = controller.onConnectionChange((id, connected) => {
       setRows(prev => {
@@ -249,6 +251,8 @@ function App(): React.JSX.Element {
         await SessionState.setClockOrigin(row.id, clockOrigin);
       }
     }
+
+    BackgroundSession.start({ subjectId: subId, sessionId: sesId, deviceCount: rows.size });
     setCollecting(true);
   };
 
@@ -261,6 +265,7 @@ function App(): React.JSX.Element {
       await loggersRef.current.get(row.id)?.flush();
     }
     await SessionState.clear();
+    BackgroundSession.stop();
     setCollecting(false);
   };
 

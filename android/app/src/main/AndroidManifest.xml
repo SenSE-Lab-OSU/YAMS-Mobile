@@ -16,6 +16,17 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- Keeps the process alive for the duration of a collection session; without it
+         Android suspends the app shortly after the screen turns off and BLE
+         notifications stop. FOREGROUND_SERVICE_CONNECTED_DEVICE is required from
+         API 34 to match the service's declared foregroundServiceType. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- API 33+. Only controls whether the service's notification is visible in the
+         drawer; the service itself runs either way. Denial is not an error. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <application
@@ -39,5 +50,10 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+
+      <service
+        android:name=".CollectionService"
+        android:foregroundServiceType="connectedDevice"
+        android:exported="false" />
     </application>
 </manifest>
