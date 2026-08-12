@@ -368,8 +368,8 @@ function App(): React.JSX.Element {
               <Text style={styles.mutedText}>Battery: {item.battery ?? '--'}%</Text>
               <Text style={styles.telemetry}>
                 ENMO {item.lastSample?.enmo.toFixed(4) ?? '--'} · counter {item.lastSample?.counter ?? '--'}
-                {'\n'}device time{' '}
-                {item.lastSample ? new Date(item.lastSample.deviceTime * 1000).toISOString() : '--'}
+                {'\n'}last sample{' '}
+                {item.lastSample ? new Date(item.lastSample.unixTime * 1000).toISOString() : '--'}
               </Text>
               <AppButton
                 title="Disconnect"

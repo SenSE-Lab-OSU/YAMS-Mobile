@@ -3,8 +3,10 @@ import { bytesToFloat32LE, bytesToUint16LE, bytesToUint32LE } from './binary';
 export interface EnmoSample {
   enmo: number;
   counter: number;
-  hostTimeMs: number; // Date.now() at arrival in the JS notify callback
-  deviceTime: number; // seconds since epoch, t0 + counter / sampleRateHz
+  // Phone unix time (seconds, fractional) read at arrival in the JS notify
+  // callback. Deliberately NOT reconstructed from the device clock -- see the
+  // note on the third column in SessionLogger.
+  unixTime: number;
 }
 
 /**

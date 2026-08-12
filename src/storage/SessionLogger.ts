@@ -21,6 +21,11 @@ export interface SessionInfo {
  * separated, no header -- the same layout yams/msense_yams_sync.py's
  * load_yams_txt() expects from a desktop YAMS .txt file. Files produced here
  * can be dropped straight into that existing sync tooling.
+ *
+ * The third column is phone unix time at the moment the notification reached JS,
+ * by design -- not a device time reconstructed from the counter. The hardware
+ * counter is already column 2, so reconstructing would make column 3 a redundant
+ * linear function of it and throw away the only wall-clock reference in the file.
  */
 export class SessionLogger {
   private filePath: string;
@@ -50,7 +55,7 @@ export class SessionLogger {
   }
 
   append(sample: EnmoSample): void {
-    const line = `${sample.enmo} ${sample.counter} ${sample.deviceTime}\n`;
+    const line = `${sample.enmo} ${sample.counter} ${sample.unixTime}\n`;
     this.queue = this.queue.then(async () => {
       const exists = await RNFS.exists(this.filePath);
       if (!exists) {

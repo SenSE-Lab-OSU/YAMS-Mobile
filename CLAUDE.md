@@ -56,12 +56,15 @@ BLE-level bookkeeping (subscriptions, reconnect timers, clock origin).
 - `BleController.ts` — connection lifecycle, auto-reconnect (delegated to
   `src/platform/blePolicy.ts`; re-registers notifications on reconnect),
   collection start/stop sequence (write unix time → write participant
-  encoding → write collection control → subscribe to notifications), and
-  device-clock timestamp reconstruction: `deviceTime = t0 + counter / sampleRateHz`,
-  where `t0` is the unix time written to the device at collection start.
+  encoding → write collection control → subscribe to notifications).
+  `t0` (the unix time written to the device at collection start) is retained per
+  device as `clockOriginUnixSec`, but only as bookkeeping — **sample timestamps
+  are phone unix time at arrival, never reconstructed from `t0` and the counter.**
+  The hardware counter is already logged as its own column; making the timestamp
+  a linear function of it would discard the file's only wall-clock reference.
 
 **Persistence:** `SessionLogger` (src/storage/SessionLogger.ts) appends one
-line per ENMO sample as whitespace-separated `ENMO Counter deviceTime` (no
+line per ENMO sample as whitespace-separated `ENMO Counter unixTime` (no
 header) into `<DocumentDirectoryPath>/yams-mobile-data/<session-timestamp>/<device-label>.txt`.
 This exact layout is required so files can be dropped directly into the
 desktop `msense_yams_sync.py` pipeline — do not change the line format

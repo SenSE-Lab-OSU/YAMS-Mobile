@@ -7,7 +7,11 @@ import { decodeEnmoPayload, EnmoSample } from './samples';
 
 export interface ConnectedDeviceState {
   device: Device;
-  clockOriginUnixSec: number | null; // t0 written to CHAR_UNIX_TIME at collection start
+  // t0 written to CHAR_UNIX_TIME at collection start. Bookkeeping only: it records
+  // what the hardware was seeded with (and is persisted so a restored session can
+  // report it), but it does not feed the logged timestamp -- that is phone unix
+  // time at arrival. See registerNotifications.
+  clockOriginUnixSec: number | null;
   collecting: boolean;
   autoReconnect: boolean;
 }
@@ -33,6 +37,7 @@ export class BleController {
   // is before any caller can have subscribed. Hold the result until one does.
   private pendingRestore: Device[] | null = null;
 
+  // Informational: the rate the firmware samples at. Not used to build timestamps.
   sampleRateHz = Protocol.DEFAULT_SAMPLE_RATE_HZ;
 
   constructor(policy: BlePolicy = selectBlePolicy()) {
@@ -252,13 +257,14 @@ export class BleController {
       Protocol.CHAR_ENMO,
       (error, characteristic) => {
         if (error || !characteristic?.value) return;
-        const hostTimeMs = Date.now();
+        // Third column is phone unix time at arrival, always. Do not reconstruct
+        // it from the clock origin and the hardware counter -- the counter is
+        // already column 2, and the desktop pipeline expects a wall-clock value
+        // here. See the note on clockOriginUnixSec.
+        const unixTime = Date.now() / 1000;
         const bytes = base64ToBytes(characteristic.value);
         const { enmo, counter } = decodeEnmoPayload(bytes);
-        const deviceTime = this.computeDeviceTime(deviceId, counter);
-        this.enmoListeners.forEach(fn =>
-          fn(deviceId, { enmo, counter, hostTimeMs, deviceTime }),
-        );
+        this.enmoListeners.forEach(fn => fn(deviceId, { enmo, counter, unixTime }));
       },
     );
     this.enmoSubs.set(deviceId, enmoSub);
@@ -274,16 +280,6 @@ export class BleController {
       },
     );
     this.batterySubs.set(deviceId, batterySub);
-  }
-
-  /** Reconstructs device unix time from the hardware counter: t0 + counter / fs. */
-  private computeDeviceTime(deviceId: string, counter: number): number {
-    const t0 = this.devices.get(deviceId)?.clockOriginUnixSec;
-    // Intentional: with no clock origin the third column carries phone unix time
-    // rather than a reconstructed device time. This is a deliberate part of the
-    // data format -- do not remove it, drop the sample, or throw here.
-    if (t0 == null) return Date.now() / 1000;
-    return t0 + counter / this.sampleRateHz;
   }
 
   onEnmoSample(listener: EnmoListener): () => void {
