@@ -24,6 +24,14 @@ jest.mock('react-native-ble-plx', () => ({
   })),
 }));
 
+// SafeAreaProvider renders null until it has measured window insets, which never
+// happens without a host view. Without this, every test that mounts App renders an
+// empty tree and any assertion about the UI passes vacuously.
+jest.mock('react-native-safe-area-context', () => {
+  const mock = require('react-native-safe-area-context/jest/mock');
+  return mock.default ?? mock;
+});
+
 jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/documents',
   DownloadDirectoryPath: '/downloads',

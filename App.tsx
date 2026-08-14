@@ -12,7 +12,6 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -22,6 +21,8 @@ import { Device } from 'react-native-ble-plx';
 import { activateKeepAwake, deactivateKeepAwake } from '@sayem314/react-native-keep-awake';
 
 import { AppButton } from './src/components/AppButton';
+import { IconButton } from './src/components/IconButton';
+import { SettingsSheet } from './src/components/SettingsSheet';
 import { StatusChip, Tone } from './src/components/StatusChip';
 import { BleController } from './src/ble/BleController';
 import { DeviceLike } from './src/ble/DeviceLike';
@@ -63,6 +64,7 @@ function App(): React.JSX.Element {
   const [subNumber, setSubNumber] = useState('1000');
   const [sesNumber, setSesNumber] = useState('00');
   const [collecting, setCollecting] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [keepAwake, setKeepAwake] = useState(false);
   // Intentionally not persisted: demo mode must never carry over into a real study.
   const [simulatedDevice, setSimulatedDevice] = useState(false);
@@ -299,7 +301,7 @@ function App(): React.JSX.Element {
 
   const discoveredNotConnected = [...found.values()].filter(d => !rows.has(d.id));
   const connectedRows = [...rows.values()];
-  const anySimulatedConnected = connectedRows.some(row => row.simulated);
+  const simulatedInSession = connectedRows.some(row => row.simulated);
 
   const styles = createStyles(theme);
 
@@ -309,7 +311,16 @@ function App(): React.JSX.Element {
       <StatusBar barStyle={theme.background === '#0B0B0D' ? 'light-content' : 'dark-content'} />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>YAMS Mobile</Text>
+        <View style={[styles.row, styles.spaceBetween, styles.headerRow]}>
+          <Text style={styles.title}>YAMS Mobile</Text>
+          <IconButton
+            glyph="☰"
+            accessibilityLabel="Settings"
+            onPress={() => setSettingsOpen(true)}
+            showDot={simulatedDevice || keepAwake}
+            dotTone={simulatedDevice ? 'warning' : 'primary'}
+          />
+        </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>Session</Text>
@@ -343,41 +354,15 @@ function App(): React.JSX.Element {
             <Text style={styles.mutedText}>Participant encoding</Text>
             <StatusChip label={String(participantEncoding)} />
           </View>
-          <View style={[styles.row, styles.spaceBetween, styles.encodingRow]}>
-            <Text style={styles.mutedText}>Keep screen awake</Text>
-            <Switch
-              value={keepAwake}
-              onValueChange={setKeepAwake}
-              trackColor={{ false: theme.border, true: theme.primary }}
-              thumbColor={theme.card}
-            />
-          </View>
-          <View style={[styles.row, styles.spaceBetween, styles.encodingRow]}>
-            <View style={styles.flex1}>
-              <Text style={styles.mutedText}>Simulated device</Text>
-              <Text style={styles.hintText}>
-                Adds a fake wristband so the app can be tried without hardware. Its data is
-                not real and is saved to a folder marked DEMO.
-              </Text>
-            </View>
-            <Switch
-              value={simulatedDevice}
-              onValueChange={value => {
-                toggleSimulatedDevice(value).catch(error =>
-                  console.warn('Could not toggle simulated device', error),
-                );
-              }}
-              trackColor={{ false: theme.border, true: theme.primary }}
-              thumbColor={theme.card}
-            />
-          </View>
         </View>
 
-        {anySimulatedConnected && (
+        {simulatedDevice && (
           <View style={styles.demoBanner}>
             <Text style={styles.demoBannerText}>
-              Simulated device connected — this session records synthetic data, not a real
-              recording.
+              Demo mode is on.{' '}
+              {simulatedInSession
+                ? 'This session records synthetic data and is saved to a folder marked DEMO.'
+                : 'A simulated wristband appears in scan results and its data is not real.'}
             </Text>
           </View>
         )}
@@ -398,11 +383,13 @@ function App(): React.JSX.Element {
             {discoveredNotConnected.map(item => (
               <View key={item.id} style={[styles.card, styles.row, styles.spaceBetween, styles.wrapRow]}>
                 <Text style={styles.discoveredTitle}>{item.name ?? item.id}</Text>
-                <StatusChip
-                  label={item.rssi != null ? `${item.rssi} dBm` : '--'}
-                  tone={rssiTone(item.rssi)}
-                />
-                <AppButton title="Connect" size="sm" onPress={() => connectTo(item)} />
+                <View style={[styles.row, styles.trailingGroup]}>
+                  <StatusChip
+                    label={item.rssi != null ? `${item.rssi} dBm` : '--'}
+                    tone={rssiTone(item.rssi)}
+                  />
+                  <AppButton title="Connect" size="sm" onPress={() => connectTo(item)} />
+                </View>
               </View>
             ))}
           </View>
@@ -413,15 +400,15 @@ function App(): React.JSX.Element {
           {connectedRows.length === 0 && (
             <Text style={styles.mutedText}>
               No devices connected yet. YAMS Mobile collects from MotionSenSE Bluetooth
-              wristbands — scan and connect above. Without the wristband hardware, turn on
-              “Simulated device” in the Session panel to try the app end to end.
+              wristbands — scan and connect above. Without the wristband hardware, open the
+              ☰ menu at the top right and turn on “Simulated device” to try the app end to end.
             </Text>
           )}
           {connectedRows.map(item => (
             <View key={item.id} style={[styles.card, styles.deviceCard]}>
               <View style={[styles.row, styles.spaceBetween, styles.wrapRow]}>
                 <Text style={styles.deviceTitle}>{item.name}</Text>
-                <View style={[styles.row, styles.chipGroup]}>
+                <View style={[styles.row, styles.trailingGroup]}>
                   {item.simulated && <StatusChip label="Simulated" tone="warning" />}
                   <StatusChip
                     label={item.connected ? 'Connected' : 'Disconnected'}
@@ -461,6 +448,19 @@ function App(): React.JSX.Element {
           style={styles.flex1}
         />
       </View>
+
+      <SettingsSheet
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        keepAwake={keepAwake}
+        onKeepAwakeChange={setKeepAwake}
+        simulatedDevice={simulatedDevice}
+        onSimulatedDeviceChange={value => {
+          toggleSimulatedDevice(value).catch(error =>
+            console.warn('Could not toggle simulated device', error),
+          );
+        }}
+      />
     </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -471,7 +471,8 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
     screen: { flex: 1, backgroundColor: theme.background },
     scroll: { flex: 1, paddingHorizontal: 16 },
     scrollContent: { paddingBottom: 16 },
-    title: { fontSize: 22, fontWeight: '700', color: theme.text, marginTop: 8, marginBottom: 16 },
+    title: { fontSize: 22, fontWeight: '700', color: theme.text },
+    headerRow: { marginTop: 8, marginBottom: 16 },
     section: { marginBottom: 16, gap: 8 },
     sectionLabel: { fontSize: 13, fontWeight: '600', color: theme.mutedText, marginBottom: 8 },
     card: {
@@ -525,7 +526,7 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
     // so an unexpected name wraps rather than truncating.
     deviceTitle: { fontSize: 14, fontWeight: '600', color: theme.text, flexShrink: 0 },
     discoveredTitle: { fontSize: 14, color: theme.text, flexShrink: 0 },
-    chipGroup: { flexShrink: 0 },
+    trailingGroup: { flexShrink: 0 },
     wrapRow: { flexWrap: 'wrap', rowGap: 8 },
     telemetry: {
       fontSize: 12,

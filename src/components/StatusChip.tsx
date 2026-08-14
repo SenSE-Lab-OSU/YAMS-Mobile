@@ -47,7 +47,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingVertical: 3,
     paddingHorizontal: 10,
-    alignSelf: 'flex-start',
+    // 'center', not 'flex-start': alignSelf overrides the parent's alignItems, so
+    // flex-start pinned the chip to the top of its row and left it sitting visibly
+    // above the device name and Connect button, which centre themselves. Still not
+    // 'stretch' (the flex default), which would blow the chip out to the full width
+    // of a column parent.
+    alignSelf: 'center',
     // A chip states connection status; it must stay legible whatever the device
     // name beside it does.
     flexShrink: 0,
