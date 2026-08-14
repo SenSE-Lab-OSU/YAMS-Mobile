@@ -82,12 +82,15 @@ export class BleController {
     onDeviceFound: (device: Device) => void,
     nameFilter: string = Protocol.DEFAULT_DEVICE_NAME_FILTER,
   ): void {
+    // Case-insensitive so firmware that advertises "msense"/"MSENSE" still shows up;
+    // the wristbands are not consistent about casing across firmware revisions.
+    const needle = nameFilter.toLowerCase();
     this.manager.startDeviceScan(null, { allowDuplicates: true }, (error, device) => {
       if (error) {
         console.warn('BLE scan error', error);
         return;
       }
-      if (device && device.name && device.name.includes(nameFilter)) {
+      if (device?.name?.toLowerCase().includes(needle)) {
         onDeviceFound(device);
       }
     });

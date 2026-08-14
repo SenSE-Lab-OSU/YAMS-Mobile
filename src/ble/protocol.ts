@@ -5,6 +5,8 @@
  * mobile app talks to the exact same firmware without any device-side changes.
  */
 
+// Matched case-insensitively as a substring of the advertised device name
+// (see BleController.startScan), so this is a token, not an exact name.
 export const DEFAULT_DEVICE_NAME_FILTER = 'MSense';
 
 // Control service: unix time / participant encoding / collection start-stop / erase
