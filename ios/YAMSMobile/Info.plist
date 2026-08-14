@@ -36,7 +36,7 @@
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>YAMS Mobile uses Bluetooth to connect to MotionSenSE wristbands and control data collection.</string>
+	<string>YAMS Mobile uses Bluetooth to find and connect to MotionSenSE research wristbands, and to receive the timing signal each wristband sends while it records. For example, starting a session connects to the wristbands you select and saves that signal to a file on this iPhone, which continues while the app is in the background so that a study session is not interrupted. Bluetooth is not used to determine your location, and nothing is sent off this device.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIBackgroundModes</key>
