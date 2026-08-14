@@ -6,9 +6,10 @@
  * @format
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -23,6 +24,7 @@ import { activateKeepAwake, deactivateKeepAwake } from '@sayem314/react-native-k
 import { AppButton } from './src/components/AppButton';
 import { IconButton } from './src/components/IconButton';
 import { SettingsSheet } from './src/components/SettingsSheet';
+import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { StatusChip, Tone } from './src/components/StatusChip';
 import { BleController } from './src/ble/BleController';
 import { DeviceLike } from './src/ble/DeviceLike';
@@ -31,6 +33,7 @@ import { EnmoSample } from './src/ble/samples';
 import { encodeParticipant } from './src/participant';
 import { BackgroundSession } from './src/platform/backgroundSession';
 import { DEMO_SESSION_PREFIX, SessionLogger } from './src/storage/SessionLogger';
+import { Onboarding } from './src/storage/Onboarding';
 import { SessionState } from './src/storage/SessionState';
 import { useTheme } from './src/theme';
 
@@ -65,6 +68,10 @@ function App(): React.JSX.Element {
   const [sesNumber, setSesNumber] = useState('00');
   const [collecting, setCollecting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // null until the flag file has been read. Rendering the app before that would
+  // flash the main screen for a frame on a genuine first launch.
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  const [replayingTour, setReplayingTour] = useState(false);
   const [keepAwake, setKeepAwake] = useState(false);
   // Intentionally not persisted: demo mode must never carry over into a real study.
   const [simulatedDevice, setSimulatedDevice] = useState(false);
@@ -84,10 +91,28 @@ function App(): React.JSX.Element {
   }, [keepAwake]);
 
   useEffect(() => {
+    Onboarding.hasCompleted().then(setOnboarded);
+  }, []);
+
+  useEffect(() => {
+    // Deferred until the tour is done so the permission prompts follow the screen
+    // that explains them. On iOS the Core Bluetooth dialog fires when BleManager
+    // is constructed, so construction itself has to wait.
+    //
+    // Safe only because a first launch has no session to restore: on a normal
+    // launch the flag is already set and the manager is built immediately, which
+    // is what iOS state restoration depends on.
+    if (onboarded !== true) return;
+
     const controller = new BleController();
     controllerRef.current = controller;
-    controller.requestPermissions();
-    BackgroundSession.requestPermission();
+    // Sequenced, not fired together: Android serialises permission dialogs and a
+    // request issued while another is in flight can be dropped, which would leave
+    // POST_NOTIFICATIONS unasked and the foreground service silent.
+    (async () => {
+      await controller.requestPermissions();
+      await BackgroundSession.requestPermission();
+    })().catch(error => console.warn('Permission request failed', error));
 
     const offConn = controller.onConnectionChange((id, connected) => {
       setRows(prev => {
@@ -177,7 +202,7 @@ function App(): React.JSX.Element {
       offRestore();
       controller.destroy();
     };
-  }, []);
+  }, [onboarded]);
 
   const startScan = () => {
     setFound(new Map());
@@ -303,7 +328,28 @@ function App(): React.JSX.Element {
   const connectedRows = [...rows.values()];
   const simulatedInSession = connectedRows.some(row => row.simulated);
 
+  const finishTour = useCallback(() => {
+    if (replayingTour) {
+      setReplayingTour(false);
+      return;
+    }
+    // Not awaited: a failed write only means the tour shows again next launch,
+    // which should not block anyone from using the app now.
+    Onboarding.markCompleted();
+    setOnboarded(true);
+  }, [replayingTour]);
+
   const styles = createStyles(theme);
+
+  // Held back until the flag file has been read, so the main screen never flashes
+  // in front of someone who has not seen the tour.
+  if (onboarded === null) {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.screen} />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -449,6 +495,17 @@ function App(): React.JSX.Element {
         />
       </View>
 
+      <Modal
+        testID="onboarding-tour"
+        visible={onboarded === false || replayingTour}
+        animationType="slide"
+        // Android modals stop below the status bar by default; iOS ones do not.
+        // Covering it on both keeps one set of inset maths correct everywhere.
+        statusBarTranslucent
+        onRequestClose={finishTour}>
+        <OnboardingScreen onDone={finishTour} replay={replayingTour} />
+      </Modal>
+
       <SettingsSheet
         visible={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -459,6 +516,10 @@ function App(): React.JSX.Element {
           toggleSimulatedDevice(value).catch(error =>
             console.warn('Could not toggle simulated device', error),
           );
+        }}
+        onShowTour={() => {
+          setSettingsOpen(false);
+          setReplayingTour(true);
         }}
       />
     </SafeAreaView>

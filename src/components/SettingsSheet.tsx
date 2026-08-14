@@ -11,6 +11,8 @@ interface SettingsSheetProps {
   onKeepAwakeChange: (value: boolean) => void;
   simulatedDevice: boolean;
   onSimulatedDeviceChange: (value: boolean) => void;
+  /** Replays the first-launch tour. Someone who skipped it needs a way back. */
+  onShowTour: () => void;
 }
 
 /**
@@ -30,6 +32,7 @@ export function SettingsSheet({
   onKeepAwakeChange,
   simulatedDevice,
   onSimulatedDeviceChange,
+  onShowTour,
 }: SettingsSheetProps): React.JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -37,6 +40,7 @@ export function SettingsSheet({
 
   return (
     <Modal
+      testID="settings-sheet"
       visible={visible}
       transparent
       animationType="slide"
@@ -78,6 +82,17 @@ export function SettingsSheet({
             thumbColor={theme.card}
           />
         </View>
+
+        <Pressable
+          onPress={onShowTour}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.settingRow, pressed && styles.pressed]}>
+          <View style={styles.settingLabel}>
+            <Text style={styles.settingName}>How it works</Text>
+            <Text style={styles.settingHint}>Show the introduction again.</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
       </View>
     </Modal>
   );
@@ -117,5 +132,7 @@ function createStyles(theme: Theme) {
     settingLabel: { flex: 1 },
     settingName: { fontSize: 15, color: theme.text },
     settingHint: { fontSize: 11, color: theme.mutedText, marginTop: 2 },
+    chevron: { fontSize: 22, color: theme.mutedText },
+    pressed: { opacity: 0.6 },
   });
 }
