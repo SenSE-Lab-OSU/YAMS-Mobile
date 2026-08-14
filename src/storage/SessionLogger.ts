@@ -14,7 +14,16 @@ export interface SessionInfo {
   participantEncoding: number;
   devices: SessionDeviceInfo[];
   startedAt: string;
+  /** True when any device in the session was simulated. See DEMO_SESSION_PREFIX. */
+  simulated?: boolean;
 }
+
+/**
+ * Session directories containing simulated data are prefixed with this so they
+ * are obvious in a file listing, sort together, and can never be mistaken for a
+ * real recording by a human or swept up by the desktop sync tooling.
+ */
+export const DEMO_SESSION_PREFIX = 'DEMO-';
 
 /**
  * Appends one line per notification as "ENMO Counter PhoneUnixTime", single-space
@@ -41,11 +50,11 @@ export class SessionLogger {
     this.filePath = `${ROOT_DIR}/${sessionDir}/${safeLabel}_${safeId}.txt`;
   }
 
-  static async newSessionDir(): Promise<string> {
+  static async newSessionDir(prefix = ''): Promise<string> {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const dir = `${ROOT_DIR}/${stamp}`;
-    await RNFS.mkdir(dir);
-    return stamp;
+    const name = `${prefix}${stamp}`;
+    await RNFS.mkdir(`${ROOT_DIR}/${name}`);
+    return name;
   }
 
   /** Writes/overwrites session_info.json with subject/session id and the device set in use. */

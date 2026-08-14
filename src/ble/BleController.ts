@@ -2,6 +2,7 @@ import { BleManager, Device, Subscription } from 'react-native-ble-plx';
 
 import { BlePolicy, selectBlePolicy } from '../platform/blePolicy';
 import { DeviceLike } from './DeviceLike';
+import { SIMULATED_DEVICE_ID, SimulatedDevice } from './SimulatedDevice';
 import { uint32LEToBase64, uint64LEToBase64, base64ToBytes, bytesToUint8 } from './binary';
 import * as Protocol from './protocol';
 import { decodeEnmoPayload, EnmoSample } from './samples';
@@ -37,6 +38,11 @@ export class BleController {
   // restoreStateFunction fires while BleManager is still being constructed, which
   // is before any caller can have subscribed. Hold the result until one does.
   private pendingRestore: Device[] | null = null;
+
+  // Non-null while demo mode is on. Deliberately not persisted anywhere: a
+  // researcher must never start a real study with a simulated device silently
+  // enabled from a previous launch.
+  private simulated: SimulatedDevice | null = null;
 
   // Informational: the rate the firmware samples at. Not used to build timestamps.
   sampleRateHz = Protocol.DEFAULT_SAMPLE_RATE_HZ;
@@ -79,6 +85,20 @@ export class BleController {
     return this.policy.requestPermissions();
   }
 
+  /**
+   * Adds a simulated wristband to scan results, so the app can be demonstrated
+   * without hardware. Everything after discovery -- connecting, writing control
+   * characteristics, decoding notifications, logging -- runs the real code.
+   */
+  enableSimulatedDevice(enabled: boolean): void {
+    this.simulated = enabled ? (this.simulated ?? new SimulatedDevice()) : null;
+  }
+
+  /** Whether a device id belongs to the simulator rather than real hardware. */
+  isSimulated(deviceId: string): boolean {
+    return deviceId === SIMULATED_DEVICE_ID;
+  }
+
   startScan(
     onDeviceFound: (device: DeviceLike) => void,
     nameFilter: string = Protocol.DEFAULT_DEVICE_NAME_FILTER,
@@ -86,6 +106,11 @@ export class BleController {
     // Case-insensitive so firmware that advertises "msense"/"MSENSE" still shows up;
     // the wristbands are not consistent about casing across firmware revisions.
     const needle = nameFilter.toLowerCase();
+
+    // Surfaced as an ordinary scan result so it is connected to through the same
+    // path as hardware, rather than appearing by some separate mechanism.
+    if (this.simulated) onDeviceFound(this.simulated);
+
     this.manager.startDeviceScan(null, { allowDuplicates: true }, (error, device) => {
       if (error) {
         console.warn('BLE scan error', error);
@@ -123,6 +148,9 @@ export class BleController {
   }
 
   private watchDisconnect(deviceId: string): void {
+    // The simulator holds no manager-level connection to watch, and never drops.
+    if (this.isSimulated(deviceId)) return;
+
     this.manager.onDeviceDisconnected(deviceId, () => {
       this.connectionListeners.forEach(fn => fn(deviceId, false));
       if (this.devices.get(deviceId)?.autoReconnect) {
@@ -326,6 +354,9 @@ export class BleController {
 
   destroy(): void {
     this.policy.cancelAllReconnects();
+    // Stops the simulator's notify timers, which are plain JS intervals and would
+    // otherwise outlive the controller.
+    this.simulated?.cancelConnection();
     this.manager.destroy();
   }
 }
