@@ -20,7 +20,7 @@ import { encodeEnmoPayload } from './samples';
  */
 
 export const SIMULATED_DEVICE_ID = 'simulated-msense-0001';
-export const SIMULATED_DEVICE_NAME = 'MSense-SIM (simulated)';
+export const SIMULATED_DEVICE_NAME = 'MSense-Demo';
 
 /** Matches the firmware: 1024 samples at 512 Hz is one notification every 2 s. */
 const COUNTER_STEP = 1024;

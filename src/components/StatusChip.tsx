@@ -35,7 +35,9 @@ export function StatusChip({
 
   return (
     <View style={[styles.chip, { backgroundColor: background }]}>
-      <Text style={[styles.text, { color }]}>{label}</Text>
+      <Text style={[styles.text, { color }]} numberOfLines={1}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -46,6 +48,9 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     paddingHorizontal: 10,
     alignSelf: 'flex-start',
+    // A chip states connection status; it must stay legible whatever the device
+    // name beside it does.
+    flexShrink: 0,
   },
   text: {
     fontSize: 12,

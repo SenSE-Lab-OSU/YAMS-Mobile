@@ -397,7 +397,9 @@ function App(): React.JSX.Element {
             <Text style={styles.sectionLabel}>Discovered</Text>
             {discoveredNotConnected.map(item => (
               <View key={item.id} style={[styles.card, styles.row, styles.spaceBetween]}>
-                <Text style={[styles.text, styles.flex1]}>{item.name ?? item.id}</Text>
+                <Text style={[styles.text, styles.flex1]} numberOfLines={1} ellipsizeMode="middle">
+                  {item.name ?? item.id}
+                </Text>
                 <StatusChip
                   label={item.rssi != null ? `${item.rssi} dBm` : '--'}
                   tone={rssiTone(item.rssi)}
@@ -420,8 +422,10 @@ function App(): React.JSX.Element {
           {connectedRows.map(item => (
             <View key={item.id} style={[styles.card, styles.deviceCard]}>
               <View style={[styles.row, styles.spaceBetween]}>
-                <Text style={styles.deviceTitle}>{item.name}</Text>
-                <View style={styles.row}>
+                <Text style={styles.deviceTitle} numberOfLines={1} ellipsizeMode="middle">
+                  {item.name}
+                </Text>
+                <View style={[styles.row, styles.chipGroup]}>
                   {item.simulated && <StatusChip label="Simulated" tone="warning" />}
                   <StatusChip
                     label={item.connected ? 'Connected' : 'Disconnected'}
@@ -516,7 +520,8 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
       marginBottom: 12,
     },
     demoBannerText: { fontSize: 13, fontWeight: '600', color: theme.warningText },
-    deviceTitle: { fontSize: 16, fontWeight: '600', color: theme.text },
+    deviceTitle: { fontSize: 16, fontWeight: '600', color: theme.text, flexShrink: 1 },
+    chipGroup: { flexShrink: 0 },
     telemetry: {
       fontSize: 12,
       color: theme.mutedText,
