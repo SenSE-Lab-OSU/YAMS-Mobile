@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YAMS Mobile</title>
+<link rel="icon" href="icon.png">
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.25rem 4rem;
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1a1a1a;
+    background: #fff;
+  }
+  header { text-align: center; margin-bottom: 3rem; }
+  .icon {
+    width: 128px; height: 128px;
+    border-radius: 28px;
+    border: 1px solid rgba(127,127,127,.25);
+    background: #fff;
+    display: block;
+    margin: 0 auto 1.25rem;
+  }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .35rem; }
+  .tagline { color: #666; margin: 0; font-size: 1.05rem; }
+  h2 { font-size: 1.15rem; margin: 2.5rem 0 .5rem; }
+  p { margin: 0 0 1rem; }
+  .links { display: grid; gap: .75rem; margin: 2.5rem 0; }
+  .links a {
+    display: block;
+    padding: 1rem 1.25rem;
+    border: 1px solid rgba(127,127,127,.3);
+    border-radius: 12px;
+    text-decoration: none;
+    color: inherit;
+  }
+  .links a:hover { border-color: #f97316; }
+  .links strong { display: block; font-weight: 650; color: #f97316; }
+  .links span { color: #666; font-size: .95rem; }
+  ul { padding-left: 1.25rem; }
+  li { margin: .4rem 0; }
+  footer {
+    margin-top: 3.5rem; padding-top: 1.25rem;
+    border-top: 1px solid rgba(127,127,127,.3);
+    color: #666; font-size: .95rem;
+  }
+  a { color: #c2410c; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e8e8e8; background: #111; }
+    .tagline, .links span, footer { color: #9a9a9a; }
+    a { color: #fb923c; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <img class="icon" src="icon.png" alt="YAMS Mobile app icon" width="128" height="128">
+  <h1>YAMS Mobile</h1>
+  <p class="tagline">Wearable data collection for research teams</p>
+</header>
+
+<p>
+  YAMS Mobile is a research instrument built by the SenSE Lab at The Ohio State University.
+  It connects to MotionSenSE Bluetooth wristbands and records the timing signal each
+  wristband sends while it is recording, so a wristband&rsquo;s data can be lined up in time
+  with the rest of a study&rsquo;s data afterwards.
+</p>
+
+<p>
+  Session files are written to the phone and collected by research staff. The app has no
+  accounts, makes no network connections, and sends nothing off the device.
+</p>
+
+<div class="links">
+  <a href="support.html">
+    <strong>Support</strong>
+    <span>Requirements, common questions, and how to reach us</span>
+  </a>
+  <a href="privacy-policy.html">
+    <strong>Privacy Policy</strong>
+    <span>What the app stores, and what it does not collect</span>
+  </a>
+</div>
+
+<h2>Requirements</h2>
+<ul>
+  <li>MotionSenSE accelerometer wristbands &mdash; the app cannot collect data without them</li>
+  <li>iPhone running iOS 15.1 or later, or an Android phone running Android 7.0 or later</li>
+  <li>Bluetooth enabled</li>
+</ul>
+<p>
+  Without the wristband hardware, the app can still be explored end to end: open the
+  <strong>&#9776;</strong> menu and turn on <strong>Simulated device</strong>.
+</p>
+
+<footer>
+  SenSE Lab, The Ohio State University &middot;
+  <a href="mailto:chang.1560@osu.edu">chang.1560@osu.edu</a><br>
+  &copy; 2026 The Ohio State University
+</footer>
+
+</body>
+</html>
