@@ -25,10 +25,11 @@ import { AppButton } from './src/components/AppButton';
 import { StatusChip, Tone } from './src/components/StatusChip';
 import { BleController } from './src/ble/BleController';
 import { DeviceLike } from './src/ble/DeviceLike';
+import { SIMULATED_DEVICE_ID } from './src/ble/SimulatedDevice';
 import { EnmoSample } from './src/ble/samples';
 import { encodeParticipant } from './src/participant';
 import { BackgroundSession } from './src/platform/backgroundSession';
-import { SessionLogger } from './src/storage/SessionLogger';
+import { DEMO_SESSION_PREFIX, SessionLogger } from './src/storage/SessionLogger';
 import { SessionState } from './src/storage/SessionState';
 import { useTheme } from './src/theme';
 
@@ -47,6 +48,7 @@ interface DeviceRow {
   connected: boolean;
   battery: number | null;
   lastSample: EnmoSample | null;
+  simulated: boolean;
 }
 
 function App(): React.JSX.Element {
@@ -62,6 +64,8 @@ function App(): React.JSX.Element {
   const [sesNumber, setSesNumber] = useState('00');
   const [collecting, setCollecting] = useState(false);
   const [keepAwake, setKeepAwake] = useState(false);
+  // Intentionally not persisted: demo mode must never carry over into a real study.
+  const [simulatedDevice, setSimulatedDevice] = useState(false);
 
   const subId = `sub-${subNumber}`;
   const sesId = `ses-${sesNumber}`;
@@ -141,6 +145,7 @@ function App(): React.JSX.Element {
           next.set(device.id, {
             id: device.id,
             name: entry.name,
+            simulated: false,
             connected: true,
             battery: null,
             lastSample: null,
@@ -191,6 +196,23 @@ function App(): React.JSX.Element {
     setScanning(false);
   };
 
+  const toggleSimulatedDevice = async (enabled: boolean) => {
+    setSimulatedDevice(enabled);
+    controllerRef.current?.enableSimulatedDevice(enabled);
+
+    // Turning it off mid-session would otherwise leave a connected simulator
+    // feeding samples into a session that no longer advertises itself as demo.
+    if (!enabled) {
+      setFound(prev => {
+        if (!prev.has(SIMULATED_DEVICE_ID)) return prev;
+        const next = new Map(prev);
+        next.delete(SIMULATED_DEVICE_ID);
+        return next;
+      });
+      if (rows.has(SIMULATED_DEVICE_ID)) await disconnectFrom(SIMULATED_DEVICE_ID);
+    }
+  };
+
   const connectTo = async (device: DeviceLike) => {
     await controllerRef.current?.connect(device);
     setRows(prev => {
@@ -201,6 +223,7 @@ function App(): React.JSX.Element {
         connected: true,
         battery: null,
         lastSample: null,
+        simulated: device.id === SIMULATED_DEVICE_ID,
       });
       return next;
     });
@@ -220,7 +243,10 @@ function App(): React.JSX.Element {
     const controller = controllerRef.current;
     if (!controller) return;
 
-    const sessionDir = await SessionLogger.newSessionDir();
+    // One simulated device marks the whole session: a folder must never contain a
+    // mix of real and synthetic data without saying so in its own name.
+    const anySimulated = [...rows.values()].some(row => row.simulated);
+    const sessionDir = await SessionLogger.newSessionDir(anySimulated ? DEMO_SESSION_PREFIX : '');
     const devices = [...rows.values()].map(row => ({ id: row.id, name: row.name }));
     const startedAt = new Date().toISOString();
 
@@ -230,6 +256,7 @@ function App(): React.JSX.Element {
       participantEncoding,
       devices,
       startedAt,
+      simulated: anySimulated,
     });
 
     await SessionState.save({
@@ -272,6 +299,7 @@ function App(): React.JSX.Element {
 
   const discoveredNotConnected = [...found.values()].filter(d => !rows.has(d.id));
   const connectedRows = [...rows.values()];
+  const anySimulatedConnected = connectedRows.some(row => row.simulated);
 
   const styles = createStyles(theme);
 
@@ -324,7 +352,35 @@ function App(): React.JSX.Element {
               thumbColor={theme.card}
             />
           </View>
+          <View style={[styles.row, styles.spaceBetween, styles.encodingRow]}>
+            <View style={styles.flex1}>
+              <Text style={styles.mutedText}>Simulated device</Text>
+              <Text style={styles.hintText}>
+                Adds a fake wristband so the app can be tried without hardware. Its data is
+                not real and is saved to a folder marked DEMO.
+              </Text>
+            </View>
+            <Switch
+              value={simulatedDevice}
+              onValueChange={value => {
+                toggleSimulatedDevice(value).catch(error =>
+                  console.warn('Could not toggle simulated device', error),
+                );
+              }}
+              trackColor={{ false: theme.border, true: theme.primary }}
+              thumbColor={theme.card}
+            />
+          </View>
         </View>
+
+        {anySimulatedConnected && (
+          <View style={styles.demoBanner}>
+            <Text style={styles.demoBannerText}>
+              Simulated device connected — this session records synthetic data, not a real
+              recording.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.row}>
           <AppButton
@@ -355,16 +411,23 @@ function App(): React.JSX.Element {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Devices</Text>
           {connectedRows.length === 0 && (
-            <Text style={styles.mutedText}>No devices connected yet — scan and connect above.</Text>
+            <Text style={styles.mutedText}>
+              No devices connected yet. YAMS Mobile collects from MotionSenSE Bluetooth
+              wristbands — scan and connect above. Without the wristband hardware, turn on
+              “Simulated device” in the Session panel to try the app end to end.
+            </Text>
           )}
           {connectedRows.map(item => (
             <View key={item.id} style={[styles.card, styles.deviceCard]}>
               <View style={[styles.row, styles.spaceBetween]}>
                 <Text style={styles.deviceTitle}>{item.name}</Text>
-                <StatusChip
-                  label={item.connected ? 'Connected' : 'Disconnected'}
-                  tone={item.connected ? 'success' : 'destructive'}
-                />
+                <View style={styles.row}>
+                  {item.simulated && <StatusChip label="Simulated" tone="warning" />}
+                  <StatusChip
+                    label={item.connected ? 'Connected' : 'Disconnected'}
+                    tone={item.connected ? 'success' : 'destructive'}
+                  />
+                </View>
               </View>
               <Text style={styles.mutedText}>Battery: {item.battery ?? '--'}%</Text>
               <Text style={styles.telemetry}>
@@ -444,6 +507,15 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
     },
     text: { fontSize: 15, color: theme.text },
     mutedText: { fontSize: 13, color: theme.mutedText },
+    hintText: { fontSize: 11, color: theme.mutedText, marginTop: 2, paddingRight: 8 },
+    demoBanner: {
+      backgroundColor: theme.warning,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginBottom: 12,
+    },
+    demoBannerText: { fontSize: 13, fontWeight: '600', color: theme.warningText },
     deviceTitle: { fontSize: 16, fontWeight: '600', color: theme.text },
     telemetry: {
       fontSize: 12,
