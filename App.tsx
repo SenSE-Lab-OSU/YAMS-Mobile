@@ -396,10 +396,8 @@ function App(): React.JSX.Element {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Discovered</Text>
             {discoveredNotConnected.map(item => (
-              <View key={item.id} style={[styles.card, styles.row, styles.spaceBetween]}>
-                <Text style={[styles.text, styles.flex1]} numberOfLines={1} ellipsizeMode="middle">
-                  {item.name ?? item.id}
-                </Text>
+              <View key={item.id} style={[styles.card, styles.row, styles.spaceBetween, styles.wrapRow]}>
+                <Text style={styles.discoveredTitle}>{item.name ?? item.id}</Text>
                 <StatusChip
                   label={item.rssi != null ? `${item.rssi} dBm` : '--'}
                   tone={rssiTone(item.rssi)}
@@ -421,10 +419,8 @@ function App(): React.JSX.Element {
           )}
           {connectedRows.map(item => (
             <View key={item.id} style={[styles.card, styles.deviceCard]}>
-              <View style={[styles.row, styles.spaceBetween]}>
-                <Text style={styles.deviceTitle} numberOfLines={1} ellipsizeMode="middle">
-                  {item.name}
-                </Text>
+              <View style={[styles.row, styles.spaceBetween, styles.wrapRow]}>
+                <Text style={styles.deviceTitle}>{item.name}</Text>
                 <View style={[styles.row, styles.chipGroup]}>
                   {item.simulated && <StatusChip label="Simulated" tone="warning" />}
                   <StatusChip
@@ -520,8 +516,17 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
       marginBottom: 12,
     },
     demoBannerText: { fontSize: 13, fontWeight: '600', color: theme.warningText },
-    deviceTitle: { fontSize: 16, fontWeight: '600', color: theme.text, flexShrink: 1 },
+    // flexShrink 0 on both: a device name is an identifier and must never be
+    // abbreviated. When the two no longer fit side by side, wrapRow moves the
+    // chips onto their own line rather than squeezing either one.
+    // 14 rather than 16: a 16-character name such as MSense4ECG-ABCDE needs ~455px
+    // beside its status chips but only ~412px is free, so 16 forced the chips onto
+    // a second line. At 14 both fit on one. wrapRow still catches anything longer,
+    // so an unexpected name wraps rather than truncating.
+    deviceTitle: { fontSize: 14, fontWeight: '600', color: theme.text, flexShrink: 0 },
+    discoveredTitle: { fontSize: 14, color: theme.text, flexShrink: 0 },
     chipGroup: { flexShrink: 0 },
+    wrapRow: { flexWrap: 'wrap', rowGap: 8 },
     telemetry: {
       fontSize: 12,
       color: theme.mutedText,
