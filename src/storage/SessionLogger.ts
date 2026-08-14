@@ -17,15 +17,19 @@ export interface SessionInfo {
 }
 
 /**
- * Appends one line per notification as "ENMO Counter t_unixc_lin", whitespace
- * separated, no header -- the same layout yams/msense_yams_sync.py's
+ * Appends one line per notification as "ENMO Counter PhoneUnixTime", single-space
+ * separated, no header -- the three-column layout yams/msense_yams_sync.py's
  * load_yams_txt() expects from a desktop YAMS .txt file. Files produced here
  * can be dropped straight into that existing sync tooling.
  *
- * The third column is phone unix time at the moment the notification reached JS,
- * by design -- not a device time reconstructed from the counter. The hardware
+ * Column 3 is phone unix time at the moment the notification reached JS, by
+ * design -- not a device time reconstructed from the counter. The hardware
  * counter is already column 2, so reconstructing would make column 3 a redundant
  * linear function of it and throw away the only wall-clock reference in the file.
+ * Two consequences follow, and both are accepted: the spacing carries BLE and
+ * JS-scheduler jitter rather than exact 1/fs steps, and the value is wall clock,
+ * so an NTP correction mid-session can make it jump or step backwards. Use
+ * column 2 to detect dropped notifications.
  */
 export class SessionLogger {
   private filePath: string;

@@ -30,8 +30,11 @@ export const ERASE_PASSCODE = 68;
 
 /**
  * Hardware counter sample rate. 512 Hz for firmware v4.7.0+, 320/25 Hz for legacy
- * devices (see yams/data_extraction.py's legacy_fs handling). Used to reconstruct
- * device-clock timestamps from the notify payload's counter: t = t0 + counter / fs.
+ * devices (see yams/data_extraction.py's legacy_fs handling).
+ *
+ * This is what the notify payload's counter counts, so it is what converts a
+ * counter delta into elapsed seconds during analysis. It is *not* used to build
+ * logged timestamps -- those are phone unix time at arrival (see SessionLogger).
  */
 export const DEFAULT_SAMPLE_RATE_HZ = 512;
 export const LEGACY_SAMPLE_RATE_HZ = 25;
