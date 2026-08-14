@@ -27,6 +27,11 @@ export function base64ToBytes(b64: string): Uint8Array {
   return base64.toByteArray(b64);
 }
 
+/** Inverse of base64ToBytes. Used to build the notify payloads the simulator emits. */
+export function bytesToBase64(bytes: Uint8Array): string {
+  return base64.fromByteArray(bytes);
+}
+
 export function bytesToUint32LE(bytes: Uint8Array, offset = 0): number {
   return new DataView(bytes.buffer, bytes.byteOffset + offset, 4).getUint32(0, true);
 }

@@ -1,12 +1,13 @@
 import { BleManager, Device, Subscription } from 'react-native-ble-plx';
 
 import { BlePolicy, selectBlePolicy } from '../platform/blePolicy';
+import { DeviceLike } from './DeviceLike';
 import { uint32LEToBase64, uint64LEToBase64, base64ToBytes, bytesToUint8 } from './binary';
 import * as Protocol from './protocol';
 import { decodeEnmoPayload, EnmoSample } from './samples';
 
 export interface ConnectedDeviceState {
-  device: Device;
+  device: DeviceLike;
   // t0 written to CHAR_UNIX_TIME at collection start. Bookkeeping only: it records
   // what the hardware was seeded with (and is persisted so a restored session can
   // report it), but it does not feed the logged timestamp -- that is phone unix
@@ -79,7 +80,7 @@ export class BleController {
   }
 
   startScan(
-    onDeviceFound: (device: Device) => void,
+    onDeviceFound: (device: DeviceLike) => void,
     nameFilter: string = Protocol.DEFAULT_DEVICE_NAME_FILTER,
   ): void {
     // Case-insensitive so firmware that advertises "msense"/"MSENSE" still shows up;
@@ -100,7 +101,7 @@ export class BleController {
     this.manager.stopDeviceScan();
   }
 
-  async connect(device: Device): Promise<void> {
+  async connect(device: DeviceLike): Promise<void> {
     const connected = await device.connect();
     await connected.discoverAllServicesAndCharacteristics();
 

@@ -24,6 +24,7 @@ import { activateKeepAwake, deactivateKeepAwake } from '@sayem314/react-native-k
 import { AppButton } from './src/components/AppButton';
 import { StatusChip, Tone } from './src/components/StatusChip';
 import { BleController } from './src/ble/BleController';
+import { DeviceLike } from './src/ble/DeviceLike';
 import { EnmoSample } from './src/ble/samples';
 import { encodeParticipant } from './src/participant';
 import { BackgroundSession } from './src/platform/backgroundSession';
@@ -55,7 +56,7 @@ function App(): React.JSX.Element {
   const loggersRef = useRef<Map<string, SessionLogger>>(new Map());
 
   const [scanning, setScanning] = useState(false);
-  const [found, setFound] = useState<Map<string, Device>>(new Map());
+  const [found, setFound] = useState<Map<string, DeviceLike>>(new Map());
   const [rows, setRows] = useState<Map<string, DeviceRow>>(new Map());
   const [subNumber, setSubNumber] = useState('1000');
   const [sesNumber, setSesNumber] = useState('00');
@@ -190,7 +191,7 @@ function App(): React.JSX.Element {
     setScanning(false);
   };
 
-  const connectTo = async (device: Device) => {
+  const connectTo = async (device: DeviceLike) => {
     await controllerRef.current?.connect(device);
     setRows(prev => {
       const next = new Map(prev);
