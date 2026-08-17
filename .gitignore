@@ -79,13 +79,10 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
-# App Store submission logistics: working notes, review-response tracking, and
-# screenshot captures. Kept local on purpose -- they are process artifacts tied to
-# one submission, not part of the app. docs/privacy-policy.{md,html} is the sole
-# exception and stays tracked: Apple requires a publicly reachable privacy policy,
-# so its text has to be reviewable and versioned alongside the app it describes.
-docs/app-store-submission.md
-docs/review-response-checklist.md
+# Working notes tied to one App Store submission -- process artifacts, not part of
+# the app. These live outside docs/ on purpose: docs/ is published verbatim by
+# GitHub Pages, so anything committed there is a public web page.
+doc-local/
 docs/app-store-screenshots/
 
 data/*
