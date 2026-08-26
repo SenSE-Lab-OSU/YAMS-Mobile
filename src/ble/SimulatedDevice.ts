@@ -96,6 +96,16 @@ export class SimulatedDevice implements DeviceLike {
     return null;
   }
 
+  async readCharacteristicForService(
+    _serviceUUID: string,
+    characteristicUUID: string,
+  ): Promise<Characteristic> {
+    if (characteristicUUID === Protocol.CHAR_BATTERY_LEVEL) {
+      return asCharacteristic(bytesToBase64(Uint8Array.of(this.batteryPercent)));
+    }
+    return asCharacteristic(this.writes.get(characteristicUUID) ?? '');
+  }
+
   monitorCharacteristicForService(
     _serviceUUID: string,
     characteristicUUID: string,

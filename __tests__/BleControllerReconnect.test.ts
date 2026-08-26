@@ -43,6 +43,7 @@ interface FakeDevice {
   cancelConnection: jest.Mock;
   monitorCharacteristicForService: jest.Mock;
   writeCharacteristicWithResponseForService: jest.Mock;
+  readCharacteristicForService: jest.Mock;
 }
 
 function fakeDevice(id: string, connected = false): Device & FakeDevice {
@@ -57,6 +58,7 @@ function fakeDevice(id: string, connected = false): Device & FakeDevice {
     cancelConnection: jest.fn(async () => device),
     monitorCharacteristicForService: jest.fn(() => ({ remove: jest.fn() })),
     writeCharacteristicWithResponseForService: jest.fn(async () => device),
+    readCharacteristicForService: jest.fn(async () => ({ value: null })),
   };
   return device as unknown as Device & FakeDevice;
 }

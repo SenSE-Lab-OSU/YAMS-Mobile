@@ -145,6 +145,31 @@ export class BleController {
     this.watchDisconnect(device.id);
 
     this.connectionListeners.forEach(fn => fn(device.id, true));
+
+    // Best-effort: lets the UI show a battery level before recording starts,
+    // when registerNotifications' battery subscription first fires.
+    // Never rejects -- readBatteryOnce catches its own errors -- so this is
+    // safe to leave unawaited.
+    this.readBatteryOnce(device.id);
+  }
+
+  private async readBatteryOnce(deviceId: string): Promise<void> {
+    const state = this.devices.get(deviceId);
+    if (!state) return;
+
+    try {
+      const characteristic = await state.device.readCharacteristicForService(
+        Protocol.SERVICE_BATTERY,
+        Protocol.CHAR_BATTERY_LEVEL,
+      );
+      if (!characteristic.value) return;
+      const percent = bytesToUint8(base64ToBytes(characteristic.value));
+      this.batteryListeners.forEach(fn => fn(deviceId, percent));
+    } catch {
+      // Device may not expose the battery service, or the read raced a
+      // disconnect -- the notify subscription at collection start will
+      // pick it up if the device is still around.
+    }
   }
 
   private watchDisconnect(deviceId: string): void {

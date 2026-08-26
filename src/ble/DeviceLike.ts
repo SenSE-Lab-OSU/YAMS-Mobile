@@ -28,6 +28,11 @@ export interface DeviceLike {
     valueBase64: string,
   ): Promise<unknown>;
 
+  readCharacteristicForService(
+    serviceUUID: string,
+    characteristicUUID: string,
+  ): Promise<Characteristic>;
+
   monitorCharacteristicForService(
     serviceUUID: string,
     characteristicUUID: string,
