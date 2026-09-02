@@ -47,3 +47,23 @@ export function bytesToFloat32LE(bytes: Uint8Array, offset = 0): number {
 export function bytesToUint8(bytes: Uint8Array, offset = 0): number {
   return bytes[offset];
 }
+
+/**
+ * Little-endian unsigned integer, tolerant of whatever length is actually
+ * present -- unlike bytesToUint32LE/bytesToUint16LE, which build a DataView of
+ * a fixed width and throw a RangeError if the buffer is shorter than that.
+ *
+ * Exists for characteristics whose read-back width is not reliably the same
+ * as their documented write width: real MotionSenSE firmware has been seen
+ * reporting CHAR_COLLECTION_CTL as fewer than the 4 bytes its "uint32 LE"
+ * protocol comment describes on write. A sum of nonnegative byte*256^i terms
+ * can never spuriously equal 0 unless every byte is 0, so `!== 0` checks
+ * against this remain a correct "any byte set" test regardless of width.
+ */
+export function bytesToUintLE(bytes: Uint8Array, offset = 0): number {
+  let value = 0;
+  for (let i = offset; i < bytes.length; i++) {
+    value += bytes[i] * 256 ** (i - offset);
+  }
+  return value;
+}

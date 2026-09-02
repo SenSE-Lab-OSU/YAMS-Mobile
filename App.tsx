@@ -9,6 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Modal,
   ScrollView,
   StatusBar,
@@ -53,6 +54,10 @@ interface DeviceRow {
   battery: number | null;
   lastSample: EnmoSample | null;
   simulated: boolean;
+  // The encoding this device is currently collecting under, or null if it
+  // isn't (or that isn't known yet). Number only -- not decoded back to
+  // sub-XXXX/ses-YY, since it may belong to a session this app never started.
+  participantEncoding: number | null;
 }
 
 function App(): React.JSX.Element {
@@ -60,10 +65,19 @@ function App(): React.JSX.Element {
 
   const controllerRef = useRef<BleController | null>(null);
   const loggersRef = useRef<Map<string, SessionLogger>>(new Map());
+  // Directory of the in-progress session, if any -- set by startAll() and
+  // restoreSession(), cleared by stopAll(). Exists so refreshAll() knows where to
+  // put a logger it has to recreate, without needing the session dir threaded
+  // through as a prop or re-derived from disk on every call.
+  const sessionDirRef = useRef<string | null>(null);
 
   const [scanning, setScanning] = useState(false);
   const [found, setFound] = useState<Map<string, DeviceLike>>(new Map());
   const [rows, setRows] = useState<Map<string, DeviceRow>>(new Map());
+  // Mirrors `rows` for code that reads current device info from a callback (an
+  // AppState listener) without wanting to be re-created on every row change.
+  const rowsRef = useRef<Map<string, DeviceRow>>(rows);
+  rowsRef.current = rows;
   const [subNumber, setSubNumber] = useState('1000');
   const [sesNumber, setSesNumber] = useState('00');
   const [collecting, setCollecting] = useState(false);
@@ -154,6 +168,7 @@ function App(): React.JSX.Element {
 
       setSubNumber(session.subjectId.replace(/^sub-/, ''));
       setSesNumber(session.sessionId.replace(/^ses-/, ''));
+      sessionDirRef.current = session.sessionDir;
 
       let resumed = 0;
       for (const device of restored) {
@@ -176,6 +191,7 @@ function App(): React.JSX.Element {
             connected: true,
             battery: null,
             lastSample: null,
+            participantEncoding: session.participantEncoding,
           });
           return next;
         });
@@ -241,7 +257,12 @@ function App(): React.JSX.Element {
   };
 
   const connectTo = async (device: DeviceLike) => {
-    await controllerRef.current?.connect(device);
+    const controller = controllerRef.current;
+    await controller?.connect(device);
+    // If this device was already collecting -- started by this app in an
+    // earlier process, or by a different phone entirely -- connect() has just
+    // read that back, so the row can show it immediately.
+    const deviceParticipantEncoding = controller?.getParticipantEncoding(device.id) ?? null;
     setRows(prev => {
       const next = new Map(prev);
       next.set(device.id, {
@@ -251,6 +272,7 @@ function App(): React.JSX.Element {
         battery: null,
         lastSample: null,
         simulated: device.id === SIMULATED_DEVICE_ID,
+        participantEncoding: deviceParticipantEncoding,
       });
       return next;
     });
@@ -294,6 +316,7 @@ function App(): React.JSX.Element {
       devices: devices.map(device => ({ ...device, clockOriginUnixSec: null })),
       startedAt,
     });
+    sessionDirRef.current = sessionDir;
 
     for (const row of rows.values()) {
       loggersRef.current.set(row.id, new SessionLogger(sessionDir, row.name, row.id));
@@ -306,6 +329,15 @@ function App(): React.JSX.Element {
         await SessionState.setClockOrigin(row.id, clockOrigin);
       }
     }
+
+    // Same value for every row in this session -- already computed above, so
+    // this is a plain state update rather than a round trip back to the
+    // controller per device.
+    setRows(prev => {
+      const next = new Map(prev);
+      for (const [id, row] of next) next.set(id, { ...row, participantEncoding });
+      return next;
+    });
 
     BackgroundSession.start({ subjectId: subId, sessionId: sesId, deviceCount: rows.size });
     setCollecting(true);
@@ -320,9 +352,56 @@ function App(): React.JSX.Element {
       await loggersRef.current.get(row.id)?.flush();
     }
     await SessionState.clear();
+    sessionDirRef.current = null;
     BackgroundSession.stop();
     setCollecting(false);
+
+    // Mirrors BleController.stopCollection() clearing its own copy -- a
+    // stopped device should stop showing an encoding as currently running.
+    setRows(prev => {
+      const next = new Map(prev);
+      for (const [id, row] of next) next.set(id, { ...row, participantEncoding: null });
+      return next;
+    });
   };
+
+  /**
+   * Forces every connected, still-collecting device to re-subscribe, and
+   * recreates a logger for any device that lost one along the way (e.g. a
+   * manual disconnect/reconnect deleted it). Safe to call any time: devices
+   * that are not connected, or have no session running, are left untouched.
+   * Triggered automatically by the AppState listener below rather than a
+   * button, since the moment a stalled connection matters most is the moment
+   * the app is looked at again.
+   */
+  const refreshAll = useCallback(async () => {
+    const controller = controllerRef.current;
+    if (!controller || !sessionDirRef.current) return;
+
+    const results = await controller.refreshAllSubscriptions();
+    for (const [id, status] of results) {
+      if (status !== 'resubscribed' || loggersRef.current.has(id)) continue;
+      const row = rowsRef.current.get(id);
+      if (!row) continue;
+      loggersRef.current.set(id, new SessionLogger(sessionDirRef.current, row.name, id));
+    }
+  }, []);
+
+  useEffect(() => {
+    let previousState = AppState.currentState;
+
+    const sub = AppState.addEventListener('change', nextState => {
+      // A genuine return from background/inactive, not the transient 'inactive'
+      // blips iOS sends for the app switcher, Control Center, an incoming call, etc.
+      const cameBack =
+        (previousState === 'background' || previousState === 'inactive') &&
+        nextState === 'active';
+      previousState = nextState;
+      if (cameBack && collecting) refreshAll().catch(error => console.warn('Refresh failed', error));
+    });
+
+    return () => sub.remove();
+  }, [collecting, refreshAll]);
 
   const discoveredNotConnected = [...found.values()].filter(d => !rows.has(d.id));
   const connectedRows = [...rows.values()];
@@ -463,6 +542,20 @@ function App(): React.JSX.Element {
                 </View>
               </View>
               <Text style={styles.mutedText}>Battery: {item.battery ?? '--'}%</Text>
+              {item.participantEncoding != null && (
+                <View style={[styles.row, styles.encodingRow]}>
+                  <Text style={styles.mutedText}>Participant encoding</Text>
+                  <StatusChip
+                    label={String(item.participantEncoding)}
+                    // Flags a device collecting under a different sub/ses than what's
+                    // currently entered above -- e.g. a device recovered mid-collection
+                    // from another app/process, or from before the fields were last
+                    // changed. Not necessarily wrong, but worth a researcher's attention
+                    // before they trust this device's data as matching this session.
+                    tone={item.participantEncoding !== participantEncoding ? 'destructive' : 'neutral'}
+                  />
+                </View>
+              )}
               <Text style={styles.telemetry}>
                 ENMO {item.lastSample?.enmo.toFixed(4) ?? '--'} · counter {item.lastSample?.counter ?? '--'}
                 {'\n'}last sample{' '}
