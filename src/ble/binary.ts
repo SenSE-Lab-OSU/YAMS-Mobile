@@ -12,6 +12,10 @@ export function uint32LEToBase64(value: number): string {
   return base64.fromByteArray(buf);
 }
 
+export function uint8ToBase64(value: number): string {
+  return base64.fromByteArray(Uint8Array.of(value));
+}
+
 export function uint64LEToBase64(value: number): string {
   const buf = new Uint8Array(8);
   const view = new DataView(buf.buffer);
@@ -53,12 +57,12 @@ export function bytesToUint8(bytes: Uint8Array, offset = 0): number {
  * present -- unlike bytesToUint32LE/bytesToUint16LE, which build a DataView of
  * a fixed width and throw a RangeError if the buffer is shorter than that.
  *
- * Exists for characteristics whose read-back width is not reliably the same
- * as their documented write width: real MotionSenSE firmware has been seen
- * reporting CHAR_COLLECTION_CTL as fewer than the 4 bytes its "uint32 LE"
- * protocol comment describes on write. A sum of nonnegative byte*256^i terms
- * can never spuriously equal 0 unless every byte is 0, so `!== 0` checks
- * against this remain a correct "any byte set" test regardless of width.
+ * Exists for characteristics whose read-back width is not reliably one fixed
+ * size: CHAR_COLLECTION_CTL and CHAR_PARTICIPANT_ENC are uint8 and uint32 on
+ * the wire respectively, but real MotionSenSE firmware read-backs have not
+ * reliably matched either width. A sum of nonnegative byte*256^i terms can
+ * never spuriously equal 0 unless every byte is 0, so `!== 0` checks against
+ * this remain a correct "any byte set" test regardless of width.
  */
 export function bytesToUintLE(bytes: Uint8Array, offset = 0): number {
   let value = 0;

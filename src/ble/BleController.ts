@@ -6,6 +6,7 @@ import { SIMULATED_DEVICE_ID, SimulatedDevice } from './SimulatedDevice';
 import {
   uint32LEToBase64,
   uint64LEToBase64,
+  uint8ToBase64,
   base64ToBytes,
   bytesToUint8,
   bytesToUintLE,
@@ -216,10 +217,10 @@ export class BleController {
         console.warn('CHAR_COLLECTION_CTL read returned no value for', device.id);
         return false;
       }
-      // bytesToUintLE, not bytesToUint32LE: real firmware has been observed
-      // reporting this characteristic as fewer than the 4 bytes its "uint32
-      // LE" protocol comment describes on write, and bytesToUint32LE throws
-      // building a fixed-width DataView over a shorter buffer.
+      // bytesToUintLE, not a fixed-width reader: this characteristic is a
+      // uint8 on the wire, but real firmware read-backs have not reliably
+      // matched that width, and a fixed-width DataView throws over a buffer
+      // shorter than expected.
       return bytesToUintLE(base64ToBytes(characteristic.value)) !== 0;
     } catch (error) {
       // Logged rather than swallowed outright, unlike readBatteryOnce: this is a
@@ -350,7 +351,7 @@ export class BleController {
     await state.device.writeCharacteristicWithResponseForService(
       Protocol.SERVICE_CONTROL,
       Protocol.CHAR_COLLECTION_CTL,
-      uint32LEToBase64(start ? 1 : 0),
+      uint8ToBase64(start ? 1 : 0),
     );
   }
 

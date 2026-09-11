@@ -13,8 +13,8 @@ export const DEFAULT_DEVICE_NAME_FILTER = 'MSense';
 export const SERVICE_CONTROL = 'da39c930-1d81-48e2-9c68-d0ae4bbd351f';
 export const CHAR_UNIX_TIME = 'da39c932-1d81-48e2-9c68-d0ae4bbd351f'; // write uint64 LE (seconds)
 export const CHAR_PARTICIPANT_ENC = 'da39c933-1d81-48e2-9c68-d0ae4bbd351f'; // write/read uint32 LE
-export const CHAR_COLLECTION_CTL = 'da39c931-1d81-48e2-9c68-d0ae4bbd351f'; // write/read uint32 LE (1=start, 0=stop)
-export const CHAR_ERASE = 'da39c934-1d81-48e2-9c68-d0ae4bbd351f'; // write uint32 LE passcode (68)
+export const CHAR_COLLECTION_CTL = 'da39c931-1d81-48e2-9c68-d0ae4bbd351f'; // write/read uint8 (1=start, 0=stop)
+export const CHAR_ERASE = 'da39c934-1d81-48e2-9c68-d0ae4bbd351f'; // write uint8 passcode (68)
 
 // ENMO/counter notify service
 export const SERVICE_ENMO = 'da39c950-1d81-48e2-9c68-d0ae4bbd351f';
